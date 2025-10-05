@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BACT & BAUT Generator</title>
+    <style>
+        :root {
+            --primary-color: #e60000; --secondary-color: #f4f4f4; --border-color: #ccc;
+            --border-radius: 8px; --font-family: 'Arial', sans-serif;
+            --active-color: #007bff; --active-shadow: 0 0 0 3px rgba(0, 123, 255, 0.5);
+            --baut-color: #28a745;
+        }
+        body { font-family: var(--font-family); background-color: var(--secondary-color); margin: 0; padding: 2rem; color: #333; }
+        .container { max-width: 1200px; margin: auto; background: #fff; padding: 2rem; border-radius: var(--border-radius); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h1 { color: var(--primary-color); text-align: center; border-bottom: 2px solid var(--secondary-color); padding-bottom: 1rem; }
+        fieldset { border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 1.5rem; margin-bottom: 1.5rem; }
+        legend { font-weight: bold; color: var(--primary-color); padding: 0 0.5rem; }
+        input[type="text"] { width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: var(--border-radius); box-sizing: border-box; }
+        
+        .paste-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
+        .paste-zone {
+            border: 2px dashed var(--border-color); border-radius: var(--border-radius);
+            height: 150px; display: flex; flex-direction: column; justify-content: center;
+            align-items: center; text-align: center; cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            position: relative; overflow: hidden;
+        }
+        .paste-zone__prompt { background: rgba(255,255,255,0.8); padding: 0.25rem; border-radius: 4px; font-size: 0.9em; position: absolute; bottom: 5px; }
+        .paste-zone--listening { border-style: solid; border-color: var(--active-color); box-shadow: var(--active-shadow); }
+        .paste-zone--has-image .paste-zone__prompt { opacity: 0; transition: opacity 0.2s; }
+        .paste-zone--has-image:hover .paste-zone__prompt { opacity: 1; }
+        .paste-zone img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+        .button-group { display: flex; gap: 1rem; }
+        .submit-btn {
+            flex: 1;
+            background-color: var(--primary-color); color: white; padding: 1rem;
+            border: none; border-radius: var(--border-radius); font-size: 1.2rem;
+            font-weight: bold; cursor: pointer; transition: background-color 0.2s;
+        }
+        .submit-btn#bautBtn { background-color: var(--baut-color); }
+        .submit-btn:hover { opacity: 0.9; }
+        .submit-btn:disabled { background-color: #999; cursor: not-allowed; }
+        
+        #missingFilesTextarea { width: 100%; height: 200px; margin-top: 1rem; font-family: monospace; white-space: pre; background-color: #f8f9fa; border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 1rem; box-sizing: border-box; }
+        #copyBtn { background-color: #6c757d; margin-top: 0.5rem; }
+        
+        .boq-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        .boq-table th, .boq-table td { border: 1px solid var(--border-color); padding: 8px; text-align: left; }
+        .boq-table th { background-color: #f2f2f2; }
+        .boq-table td:first-child, .boq-table td:nth-child(3), .boq-table td:nth-child(4) { text-align: center; }
+        .boq-table input[type="number"] { width: 95%; box-sizing: border-box; padding: 5px; border: 1px solid var(--border-color); border-radius: 4px; text-align: center;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>BACT & BAUT Generator</h1>
+        <p><strong>Cara Penggunaan:</strong> Isi semua data yang diperlukan, lalu tempelkan (Ctrl+V) atau drag & drop gambar ke masing-masing kotak di bawah.</p>
+
+        <form id="generatorForm">
+            <fieldset>
+                <legend>Informasi Proyek</legend>
+                <input type="text" id="nama_lop" name="nama_lop" placeholder="Masukkan Nama Lokasi Proyek (LOP)" required>
+            </fieldset>
+
+            <fieldset>
+                <legend>Detail Bill of Quantity (BoQ) - untuk BAUT</legend>
+                <table class="boq-table">
+                    <thead>
+                        <tr>
+                            <th>NO</th>
+                            <th>URAIAN PEKERJAAN</th>
+                            <th>KONTRAK</th>
+                            <th>AKTUAL</th>
+                        </tr>
+                    </thead>
+                    <tbody id="boq-body"></tbody>
+                </table>
+            </fieldset>
+
+            <fieldset>
+                <legend>Upload / Paste / Drag & Drop Gambar Bukti</legend>
+                <div class="paste-grid" id="pasteGrid"></div>
+            </fieldset>
+            
+            <div class="button-group">
+                <button type="button" id="bactBtn" class="submit-btn">Generate BACT</button>
+                <button type="button" id="bautBtn" class="submit-btn">Generate BAUT</button>
+            </div>
+
+            <fieldset id="missingFilesSection" style="display: none;">
+                <legend>Daftar Gambar yang Kurang</legend>
+                <textarea id="missingFilesTextarea" readonly></textarea>
+                <button type="button" id="copyBtn" class="submit-btn">Copy Daftar</button>
+            </fieldset>
+        </form>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const grid = document.getElementById('pasteGrid');
+            const lopInput = document.getElementById('nama_lop');
+            const bactBtn = document.getElementById('bactBtn');
+            const bautBtn = document.getElementById('bautBtn');
+            const boqBody = document.getElementById('boq-body');
+            const generatorForm = document.getElementById('generatorForm');
+            const missingFilesSection = document.getElementById('missingFilesSection');
+            const missingFilesTextarea = document.getElementById('missingFilesTextarea');
+            const copyBtn = document.getElementById('copyBtn');
+
+            const boqItems = [
+                "SC-OF-SM-24", "OS-SM-1", "PC-APC/UPC-652-A1", "PC-UPC-652-2", "ODP Solid-PB-8 AS",
+                "PS-1-4-ODC", "PU-AS", "AC-OF-SM-ADSS-12D", "Survey PT2 Simple"
+            ];
+            boqItems.forEach((item, index) => {
+                const i = index + 1;
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${i}</td>
+                    <td>${item}</td>
+                    <td><input type="number" class="boq-input" name="boq_${i}_kontrak" value="0" min="0"></td>
+                    <td><input type="number" class="boq-input" name="boq_${i}_aktual" value="0" min="0"></td>
+                `;
+                boqBody.appendChild(row);
+            });
+
+            const placeholders = [
+                'foto_odp', 'klem_ring', 'pipa', 'closure', 'in_odc', 'testcom', 'port1', 'port2', 'port3', 'port4', 'port5', 'port6', 'port7', 'port8', 'in_odp', 'label_odp', 'termin', 'barcode', 'splitter', 'distri', 'feeder', 'odc', 'survey', 'survey2', 'branching', 'end_to_end', 'mancore', 'peta'
+            ];
+            const labelMap = { 'klem_ring': 'KLEM-RING-5-LUBANG', 'closure': 'SC-OF-SM-24', 'in_odc': 'Redaman Input ODC', 'testcom': 'TESTCOM', 'in_odp': 'IN ODP', 'barcode': 'BARCODE', 'splitter': 'SPLIITER 1:4', 'distri': 'PANEL DISTRIBUSI', 'feeder': 'FEEDER', 'odc': 'FOTO ODC', 'survey': 'SURVEY', 'survey2': 'SURVEY 2', 'branching': 'SAMBUNGAN BRANCHING', 'foto_odp': 'ODP-PB-8-8 Solid lengkap', 'pipa': 'Pipa paralon', 'label_odp': 'LABEL ODP', 'termin': 'TERMINASI', 'end_to_end': 'FORM OPM', 'mancore': 'MANCORE', 'peta': 'PETA LOKASI' };
+
+            let activeZone = null;
+            const imageStorage = {};
+
+            const handleFile = (file, zone) => {
+                const placeholderName = zone.dataset.placeholder;
+                imageStorage[placeholderName] = file;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    zone.innerHTML = '';
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    zone.appendChild(img);
+                    const prompt = document.createElement('span');
+                    prompt.className = 'paste-zone__prompt';
+                    prompt.textContent = placeholderName.replace(/_/g, ' ').toUpperCase();
+                    zone.appendChild(prompt);
+                    zone.classList.add('paste-zone--has-image');
+                };
+                reader.readAsDataURL(file);
+            };
+
+            placeholders.forEach(name => {
+                const zone = document.createElement('div');
+                zone.className = 'paste-zone';
+                zone.dataset.placeholder = name;
+                const prompt = document.createElement('span');
+                prompt.className = 'paste-zone__prompt';
+                prompt.textContent = name.replace(/_/g, ' ').toUpperCase();
+                zone.appendChild(prompt);
+                grid.appendChild(zone);
+                zone.addEventListener('click', () => {
+                    if (activeZone) activeZone.classList.remove('paste-zone--listening');
+                    activeZone = zone;
+                    activeZone.classList.add('paste-zone--listening');
+                });
+                zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('paste-zone--listening'); activeZone = zone; });
+                zone.addEventListener('dragleave', () => zone.classList.remove('paste-zone--listening'));
+                zone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    zone.classList.remove('paste-zone--listening');
+                    if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0], zone);
+                });
+            });
+
+            window.addEventListener('paste', event => {
+                if (event.target.closest('.boq-table')) return;
+                if (event.target === lopInput) return;
+                
+                if (activeZone) {
+                    event.preventDefault();
+                    const items = event.clipboardData.items;
+                    for (const item of items) {
+                        if (item.type.indexOf('image') !== -1) {
+                            const blob = item.getAsFile();
+                            const placeholderName = activeZone.dataset.placeholder;
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                imageStorage[placeholderName] = e.target.result; // Simpan base64
+                                const img = activeZone.querySelector('img') || document.createElement('img');
+                                img.src = e.target.result;
+                                if (!activeZone.querySelector('img')) {
+                                    activeZone.innerHTML = '';
+                                    activeZone.appendChild(img);
+                                    const prompt = document.createElement('span');
+                                    prompt.className = 'paste-zone__prompt';
+                                    prompt.textContent = placeholderName.replace(/_/g, ' ').toUpperCase();
+                                    activeZone.appendChild(prompt);
+                                    activeZone.classList.add('paste-zone--has-image');
+                                }
+                            };
+                            reader.readAsDataURL(blob);
+                            return;
+                        }
+                    }
+                }
+            });
+
+            const handleGenerate = async (endpoint, button) => {
+                if (!lopInput.value) {
+                    alert('Nama LOP tidak boleh kosong!');
+                    lopInput.focus();
+                    return;
+                }
+                const missingItems = [];
+                let isPortMissing = false;
+                const uniquePlaceholders = [...new Set(placeholders)];
+                uniquePlaceholders.forEach(ph => {
+                    if (!imageStorage.hasOwnProperty(ph)) {
+                        if (ph.startsWith('port')) isPortMissing = true;
+                        else {
+                            const label = labelMap[ph] || ph.toUpperCase();
+                            missingItems.push(label);
+                        }
+                    }
+                });
+                if (isPortMissing) missingItems.push('PORT');
+                if (missingItems.length > 0) {
+                    missingFilesTextarea.value = `${lopInput.value}\nKURANG\n${missingItems.join('\n')}`;
+                    missingFilesSection.style.display = 'block';
+                } else {
+                    missingFilesSection.style.display = 'none';
+                }
+
+                const originalText = button.textContent;
+                button.textContent = 'Membuat Dokumen...';
+                button.disabled = true;
+
+                const formData = new FormData(generatorForm);
+                for (const name in imageStorage) {
+                    const value = imageStorage[name];
+                    if (typeof value === 'string') {
+                        formData.append(name, value);
+                    } else {
+                        formData.append(name, value, value.name);
+                    }
+                }
+
+                try {
+                    const response = await fetch(endpoint, { method: 'POST', body: formData });
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`Server: ${errorText}`);
+                    }
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    const disposition = response.headers.get('Content-Disposition');
+                    let filename = "Generated_Document.docx";
+                    if (disposition && disposition.indexOf('attachment') !== -1) {
+                        const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                        const matches = filenameRegex.exec(disposition);
+                        if (matches != null && matches[1]) filename = matches[1].replace(/['"]/g, '');
+                    }
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    a.remove();
+                } catch (error) {
+                    console.error('Gagal membuat dokumen:', error);
+                    alert(`Terjadi kesalahan: ${error.message}`);
+                } finally {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                }
+            };
+            
+            bactBtn.addEventListener('click', () => handleGenerate('/api/generate-bact', bactBtn));
+            bautBtn.addEventListener('click', () => handleGenerate('/api/generate-baut', bautBtn));
+
+            copyBtn.addEventListener('click', () => {
+                missingFilesTextarea.select();
+                document.execCommand('copy');
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = 'Tersalin!';
+                setTimeout(() => { copyBtn.textContent = originalText; }, 1500);
+            });
+
+            boqBody.addEventListener('focusin', (e) => {
+                if (e.target.classList.contains('boq-input') && e.target.value === '0') e.target.select();
+            });
+            boqBody.addEventListener('focusout', (e) => {
+                if (e.target.classList.contains('boq-input') && e.target.value === '') e.target.value = '0';
+            });
+            boqBody.addEventListener('keydown', (e) => {
+                const target = e.target;
+                if (!target.classList.contains('boq-input')) return;
+                const key = e.key;
+                if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) return;
+                e.preventDefault();
+                const currentCell = target.parentElement;
+                const currentRow = currentCell.parentElement;
+                const cellIndex = Array.from(currentRow.children).indexOf(currentCell);
+                const rowIndex = Array.from(boqBody.children).indexOf(currentRow);
+                let nextRow, nextCell;
+                if (key === 'ArrowUp' && rowIndex > 0) nextCell = boqBody.children[rowIndex - 1].children[cellIndex];
+                else if (key === 'ArrowDown' && rowIndex < boqBody.children.length - 1) nextCell = boqBody.children[rowIndex + 1].children[cellIndex];
+                else if (key === 'ArrowLeft' && cellIndex > 2) nextCell = currentRow.children[cellIndex - 1];
+                else if (key === 'ArrowRight' && cellIndex < currentRow.children.length - 1) nextCell = currentRow.children[cellIndex + 1];
+                if (nextCell && nextCell.querySelector('.boq-input')) nextCell.querySelector('.boq-input').focus();
+            });
+            boqBody.addEventListener('paste', (e) => {
+                const target = e.target;
+                if (!target.classList.contains('boq-input')) return;
+                e.preventDefault();
+                const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+                const rowsData = pastedText.split(/[\r\n]+/).filter(row => row).map(row => row.split('\t'));
+                const startCell = target.parentElement;
+                const startRow = startCell.parentElement;
+                const startCellIndex = Array.from(startRow.children).indexOf(startCell);
+                const startRowIndex = Array.from(boqBody.children).indexOf(startRow);
+                rowsData.forEach((rowData, rIndex) => {
+                    const targetRowIndex = startRowIndex + rIndex;
+                    if (targetRowIndex < boqBody.children.length) {
+                        const targetRow = boqBody.children[targetRowIndex];
+                        rowData.forEach((cellData, cIndex) => {
+                            const targetCellIndex = startCellIndex + cIndex;
+                            if (targetCellIndex < targetRow.children.length) {
+                                const targetCell = targetRow.children[targetCellIndex];
+                                const input = targetCell.querySelector('.boq-input');
+                                if (input) input.value = cellData.trim() === '-' || cellData.trim() === '' ? '0' : cellData.trim();
+                            }
+                        });
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
