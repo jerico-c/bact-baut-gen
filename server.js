@@ -113,12 +113,16 @@ const generateDocumentHandler = (req, res, templateName, outputPrefix) => {
 };
 
 app.post('/api/generate-bact', upload.fields(uploadFields), (req, res) => {
-    documentHandler(req, res, 'BACT_Template.docx', 'BACT');
+    generateDocumentHandler(req, res, 'BACT_Template.docx', 'BACT');
 });
 
 app.post('/api/generate-baut', upload.fields(uploadFields), (req, res) => {
-    documentHandler(req, res, 'BAUT_Template.docx', 'BAUT');
+    generateDocumentHandler(req, res, 'BAUT_Template.docx', 'BAUT');
 });
 
-// Ekspor app untuk digunakan Vercel/Netlify
-module.exports = app;
+const PORT = process.env.PORT || 5000;
+const HOST = '0.0.0.0';
+
+app.listen(PORT, HOST, () => {
+    console.log(`Server berjalan di http://${HOST}:${PORT}`);
+});
